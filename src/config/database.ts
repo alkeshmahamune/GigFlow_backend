@@ -16,7 +16,7 @@ function logMongoStartupWarning(error: unknown): void {
 
 export async function connectDatabase(): Promise<void> {
   try {
-    await mongoose.connect(MONGO_URI);
+    await mongoose.connect(MONGO_URI as string);
     console.log("MongoDB connected");
   } catch (originalError) {
     logMongoStartupWarning(originalError);
