@@ -1,22 +1,23 @@
 import { Request, Response } from "express";
-import { Types } from "mongoose";
 import Lead, { LeadSource, LeadStatus } from "../models/lead.model";
 import { AppError } from "../utils/appError";
 import { createCsvContent } from "../utils/csv";
 
-function buildLeadFilter(req: Request) {
-  const filter: Record<string, unknown> = {};
-  const { status, source, search } = req.query;
+function buildLeadFilter(req: Request): any {
+  const filter: any = {};
+  const status = req.query.status;
+  const source = req.query.source;
+  const search = req.query.search;
 
-  if (status && typeof status === "string") {
+  if (typeof status === "string" && status) {
     filter.status = status;
   }
 
-  if (source && typeof source === "string") {
+  if (typeof source === "string" && source) {
     filter.source = source;
   }
 
-  if (search && typeof search === "string") {
+  if (typeof search === "string" && search) {
     filter.$or = [
       { name: { $regex: search, $options: "i" } },
       { email: { $regex: search, $options: "i" } },
@@ -26,26 +27,23 @@ function buildLeadFilter(req: Request) {
   return filter;
 }
 
-type OwnerReference = Types.ObjectId | { _id: Types.ObjectId };
-
-function requireOwnership(req: Request, leadOwnerId: OwnerReference): void {
-  const user = req.user;
-  if (!user) {
+function checkOwnership(req: Request, lead: any): void {
+  if (!req.user) {
     throw new AppError("Unauthorized access", 401);
   }
 
-  if (user.role === "admin") {
+  if (req.user.role === "admin") {
     return;
   }
 
-  const ownerId = "_id" in leadOwnerId ? leadOwnerId._id : leadOwnerId;
-  if (!ownerId.equals(user._id)) {
+  const ownerId = lead.createdBy && (lead.createdBy._id || lead.createdBy);
+  if (!ownerId.equals(req.user._id)) {
     throw new AppError("Forbidden: not allowed to access this lead", 403);
   }
 }
 
 export async function createLeadHandler(req: Request, res: Response): Promise<void> {
-  const payload = req.body as {
+  const { name, email, status, source } = req.body as {
     name: string;
     email: string;
     status: LeadStatus;
@@ -57,7 +55,10 @@ export async function createLeadHandler(req: Request, res: Response): Promise<vo
   }
 
   const lead = await Lead.create({
-    ...payload,
+    name,
+    email,
+    status,
+    source,
     createdBy: req.user._id,
   });
 
@@ -75,7 +76,7 @@ export async function getLeadsHandler(req: Request, res: Response): Promise<void
     baseFilter.createdBy = req.user._id;
   }
 
-  const sortOrder = req.query.sort === "oldest" ? { createdAt: 1 as const } : { createdAt: -1 as const };
+  const sortOrder: any = { createdAt: req.query.sort === "oldest" ? 1 : -1 };
 
   const total = await Lead.countDocuments(baseFilter);
   const leads = await Lead.find(baseFilter)
@@ -106,31 +107,31 @@ export async function getLeadHandler(req: Request, res: Response): Promise<void>
     throw new AppError("Lead not found", 404);
   }
 
-  requireOwnership(req, lead.createdBy as Types.ObjectId);
+  checkOwnership(req, lead);
 
   res.status(200).json({ success: true, data: { lead } });
 }
 
 export async function updateLeadHandler(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
-  const payload = req.body as Partial<{
-    name: string;
-    email: string;
-    status: LeadStatus;
-    source: LeadSource;
-  }>;
+  const { name, email, status, source } = req.body as {
+    name?: string;
+    email?: string;
+    status?: LeadStatus;
+    source?: LeadSource;
+  };
 
   const lead = await Lead.findById(id);
   if (!lead) {
     throw new AppError("Lead not found", 404);
   }
 
-  requireOwnership(req, lead.createdBy as Types.ObjectId);
+  checkOwnership(req, lead);
 
-  lead.name = payload.name ?? lead.name;
-  lead.email = payload.email ?? lead.email;
-  lead.status = payload.status ?? lead.status;
-  lead.source = payload.source ?? lead.source;
+  if (name) lead.name = name;
+  if (email) lead.email = email;
+  if (status) lead.status = status;
+  if (source) lead.source = source;
 
   await lead.save();
 
@@ -145,7 +146,7 @@ export async function deleteLeadHandler(req: Request, res: Response): Promise<vo
     throw new AppError("Lead not found", 404);
   }
 
-  requireOwnership(req, lead.createdBy as Types.ObjectId);
+  checkOwnership(req, lead);
   await lead.deleteOne();
 
   res.status(200).json({ success: true, data: { message: "Lead deleted successfully" } });
@@ -161,11 +162,8 @@ export async function exportLeadsHandler(req: Request, res: Response): Promise<v
   const leads = await Lead.find(baseFilter).sort({ createdAt: -1 }).populate("createdBy", "name email role");
 
   const records = leads.map((lead) => {
-    const createdByValue = lead.createdBy as unknown;
-    const ownerName =
-      typeof createdByValue === "object" && createdByValue !== null && "name" in createdByValue
-        ? (createdByValue as { name: string }).name
-        : "";
+    const createdBy: any = lead.createdBy;
+    const ownerName = createdBy && createdBy.name ? createdBy.name : "";
 
     return {
       name: lead.name,

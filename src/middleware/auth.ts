@@ -5,12 +5,6 @@ import { AppError } from "../utils/appError";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "default_secret";
 
-interface JwtPayload {
-  id: string;
-  iat: number;
-  exp: number;
-}
-
 export async function protect(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -20,7 +14,7 @@ export async function protect(req: Request, res: Response, next: NextFunction): 
   const token = authHeader.split(" ")[1];
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload: any = jwt.verify(token, JWT_SECRET);
     const user = await User.findById(payload.id);
     if (!user) {
       throw new AppError("Invalid token: user not found", 401);
@@ -35,7 +29,7 @@ export async function protect(req: Request, res: Response, next: NextFunction): 
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const user = req.user;
+    const user: any = req.user;
     if (!user) {
       throw new AppError("Unauthorized access", 401);
     }
