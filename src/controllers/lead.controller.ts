@@ -159,7 +159,8 @@ export async function exportLeadsHandler(req: Request, res: Response): Promise<v
     baseFilter.createdBy = req.user._id;
   }
 
-  const leads = await Lead.find(baseFilter).sort({ createdAt: -1 }).populate("createdBy", "name email role");
+  const sortOrder: any = { createdAt: req.query.sort === "oldest" ? 1 : -1 };
+  const leads = await Lead.find(baseFilter).sort(sortOrder).populate("createdBy", "name email role");
 
   const records = leads.map((lead) => {
     const createdBy: any = lead.createdBy;
