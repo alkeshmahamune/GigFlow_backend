@@ -1,6 +1,25 @@
 import mongoose from "mongoose";
 
-const MONGO_URI = process.env.MONGO_URI ?? "mongodb://127.0.0.1:27017/smartleads";
+const DEFAULT_MONGO_URI = "mongodb://127.0.0.1:27017/smartleads";
+
+function getMongoUri(): string {
+  const rawUri = process.env.MONGO_URI ?? "";
+  const trimmed = rawUri.trim().replace(/^['"]|['"]$/g, "");
+
+  if (!trimmed) {
+    return DEFAULT_MONGO_URI;
+  }
+
+  if (!/^mongodb(\+srv)?:\/\//.test(trimmed)) {
+    throw new Error(
+      `Invalid MONGO_URI scheme. Expected connection string to start with "mongodb://" or "mongodb+srv://" but got: ${trimmed}`
+    );
+  }
+
+  return trimmed;
+}
+
+const MONGO_URI = getMongoUri();
 
 function logMongoStartupWarning(error: unknown): void {
   console.error("\n==============================================");
@@ -16,7 +35,7 @@ function logMongoStartupWarning(error: unknown): void {
 
 export async function connectDatabase(): Promise<void> {
   try {
-    await mongoose.connect(MONGO_URI as string);
+    await mongoose.connect(MONGO_URI);
     console.log("MongoDB connected");
   } catch (originalError) {
     logMongoStartupWarning(originalError);
